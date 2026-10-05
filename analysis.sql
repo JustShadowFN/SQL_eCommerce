@@ -102,3 +102,71 @@ FROM commande c
 LEFT JOIN ligne_commande lc ON lc.commande_id = c.id
 GROUP BY c.id, c.date_commande, c.statut
 ORDER BY c.date_commande, c.id;
+
+
+-- Exercice 6: Chiffre d'affaires par catégorie
+
+SELECT 
+    p.categorie,
+    SUM(lc.quantite * lc.prix_unitaire) AS chiffre_affaires,
+    SUM(lc.quantite) AS quantite_totale
+FROM ligne_commande lc
+INNER JOIN produit p 
+    ON lc.produit_id = p.id
+GROUP BY p.categorie;
+
+-- Exercice 7: Produits les plus vendus 
+SELECT 
+    p.nom AS produit,
+    p.categorie,
+    SUM(lc.quantite) AS quantite_totale_vendue
+FROM ligne_commande lc
+INNER JOIN produit p
+    ON lc.produit_id = p.id
+GROUP BY p.id, p.nom, p.categorie
+ORDER BY quantite_totale_vendue DESC
+LIMIT 10;
+
+-- Exercice 8: Produits générant le plus de chiffre d'affaires 
+SELECT 
+    p.nom AS produit,
+    p.categorie,
+    SUM(lc.quantite) AS quantite_totale_vendue
+FROM ligne_commande lc
+INNER JOIN produit p
+    ON lc.produit_id = p.id
+GROUP BY p.id, p.nom, p.categorie
+ORDER BY quantite_totale_vendue DESC
+LIMIT 10;
+
+-- Exercice 9: Clients
+SELECT
+    c.nom,
+    c.prenom,
+    COUNT(DISTINCT co.id) AS nombre_commandes,
+    COALESCE(SUM(lc.quantite * lc.prix_unitaire), 0) AS montant_total_depense
+FROM client c
+LEFT JOIN commande co
+    ON c.id = co.client_id
+LEFT JOIN ligne_commande lc
+    ON co.id = lc.commande_id
+GROUP BY c.id, c.nom, c.prenom
+ORDER BY montant_total_depense DESC;
+
+-- Exercice 10: Panier moyen
+-- Panier moyen global:
+SELECT
+    SUM(lc.quantite * lc.prix_unitaire) / COUNT(DISTINCT co.id) AS panier_moyen
+FROM commande co
+INNER JOIN ligne_commande lc
+    ON co.id = lc.commande_id;
+
+-- Panier moyen par mois:
+SELECT
+    DATE_TRUNC('month', co.date_commande) AS mois,
+    SUM(lc.quantite * lc.prix_unitaire) / COUNT(DISTINCT co.id) AS panier_moyen
+FROM commande co
+INNER JOIN ligne_commande lc
+    ON co.id = lc.commande_id
+GROUP BY DATE_TRUNC('month', co.date_commande)
+ORDER BY mois;
