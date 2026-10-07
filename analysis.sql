@@ -170,3 +170,38 @@ INNER JOIN ligne_commande lc
     ON co.id = lc.commande_id
 GROUP BY DATE_TRUNC('month', co.date_commande)
 ORDER BY mois;
+
+-- PARTIE 4
+
+-- ============================================================
+-- Exercice 11 — Explorer les produits
+-- ============================================================
+SELECT
+  c.id AS commande_id,
+  SUM(lc.quantite * lc.prix_unitaire) AS montant_total,
+  CASE
+    WHEN SUM(lc.quantite * lc.prix_unitaire) < 500  THEN 'Petit panier'
+    WHEN SUM(lc.quantite * lc.prix_unitaire) < 1500 THEN 'Panier moyen'
+    ELSE 'Gros panier'
+  END AS categorie_commande
+FROM commande c
+JOIN ligne_commande lc ON lc.commande_id = c.id
+WHERE c.statut <> 'annulée'
+GROUP BY c.id
+ORDER BY c.id;
+
+
+-- ============================================================
+-- Exercice 12 — Explorer les produits
+-- ============================================================
+
+-- évolution mensuelle de l'activité trié par CA
+SELECT
+  EXTRACT(MONTH FROM c.date_commande) AS mois,
+  COUNT(DISTINCT c.id)                AS nb_commandes,
+  SUM(lc.quantite * lc.prix_unitaire) AS chiffre_affaires
+FROM commande c
+JOIN ligne_commande lc ON lc.commande_id = c.id
+WHERE c.statut <> 'annulée'
+GROUP BY mois
+ORDER BY chiffre_affaires;
