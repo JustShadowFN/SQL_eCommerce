@@ -205,3 +205,41 @@ JOIN ligne_commande lc ON lc.commande_id = c.id
 WHERE c.statut <> 'annulée'
 GROUP BY mois
 ORDER BY chiffre_affaires;
+
+-- PARTIE 5
+
+-- ============================================================
+-- Exercice 13 — Détecter une incohérence
+-- ============================================================
+
+-- 1. Affichage des anomalies (commandes antérieures à l'inscription)
+SELECT 
+    commande.id AS commande_id,
+    commande.client_id,
+    commande.date_commande,
+    client.date_inscription
+FROM commande
+INNER JOIN client ON client.id = commande.client_id
+WHERE commande.date_commande < client.date_inscription;
+
+-- 2. Nombre total d'anomalies détectées
+SELECT 
+    COUNT(*) AS nombre_anomalies
+FROM commande
+INNER JOIN client ON client.id = commande.client_id
+WHERE commande.date_commande < client.date_inscription;
+
+
+-- ============================================================
+-- Exercice 14 — Produits sans vente
+-- ============================================================
+
+-- 1. Requête pour identifier les produits jamais vendus
+SELECT 
+    produit.nom AS produit,
+    produit.categorie,
+    produit.prix,
+    produit.stock
+FROM produit
+LEFT JOIN ligne_commande ON produit.id = ligne_commande.produit_id
+WHERE ligne_commande.produit_id IS NULL;
