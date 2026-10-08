@@ -170,3 +170,222 @@ INNER JOIN ligne_commande lc
     ON co.id = lc.commande_id
 GROUP BY DATE_TRUNC('month', co.date_commande)
 ORDER BY mois;
+
+
+
+
+-- ============================================================
+-- PARTIE 6 — Tableau de bord en SQL
+-- Exercice 15 — Indicateurs clés
+-- ============================================================
+-- Rappel de la règle de calcul (énoncé) :
+--   montant d'une ligne = quantite * prix_unitaire (prix réellement payé)
+--   Les commandes 'annulée' sont exclues du chiffre d'affaires (CA),
+--   des quantités vendues et du panier moyen.
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- 15.A Exploration
+-- But : connaître la base avant de l'analyser (volume, structure,
+-- qualité des données).
+-- ------------------------------------------------------------
+
+-- 15.A.1 Nombre de lignes de chaque table
+-- Un COUNT(*) par table, puis UNION ALL pour empiler les 4 résultats
+-- dans un seul tableau (table_name | nb_lignes).
+-- UNION ALL (et pas UNION) : on ne veut pas que SQL supprime des doublons.
+SELECT 'client'         AS table_name, COUNT(*) AS nb_lignes FROM client
+UNION ALL
+SELECT 'produit',        COUNT(*) FROM produit
+UNION ALL
+SELECT 'commande',       COUNT(*) FROM commande
+UNION ALL
+SELECT 'ligne_commande', COUNT(*) FROM ligne_commande;
+
+-- 15.A.2 Colonnes et types de données de chaque table
+-- information_schema.columns est une vue système de PostgreSQL qui décrit
+-- toutes les colonnes de toutes les tables de la base.
+--   table_schema = 'public' : schéma par défaut où sont créées nos tables
+--   is_nullable              : YES si la colonne accepte les NULL, NO sinon
+--   ordinal_position         : ordre des colonnes tel que défini au CREATE TABLE
+SELECT
+    table_name,
+    column_name,
+    data_type,
+    is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN ('client', 'produit', 'commande', 'ligne_commande')
+ORDER BY table_name, ordinal_position;
+
+-- 15.A.3 Valeurs manquantes (NULL) par colonne
+-- COUNT(*)       compte toutes les lignes ;
+-- COUNT(colonne) ne compte que les lignes où la colonne n'est PAS NULL.
+-- Donc COUNT(*) - COUNT(colonne) = nombre de valeurs manquantes.
+SELECT 'client' AS table_name,
+       COUNT(*) - COUNT(nom)              AS nb_null_nom,
+       COUNT(*) - COUNT(prenom)           AS nb_null_prenom,
+       COUNT(*) - COUNT(email)            AS nb_null_email,
+       COUNT(*) - COUNT(ville)            AS nb_null_ville,
+       COUNT(*) - COUNT(date_inscription) AS nb_null_date_inscription
+FROM client;
+
+SELECT 'produit' AS table_name,
+       COUNT(*) - COUNT(nom)       AS nb_null_nom,
+       COUNT(*) - COUNT(categorie) AS nb_null_categorie,
+       COUNT(*) - COUNT(prix)      AS nb_null_prix,
+       COUNT(*) - COUNT(stock)     AS nb_null_stock
+FROM produit;
+
+SELECT 'commande' AS table_name,
+       COUNT(*) - COUNT(client_id)     AS nb_null_client_id,
+       COUNT(*) - COUNT(date_commande) AS nb_null_date_commande,
+       COUNT(*) - COUNT(statut)        AS nb_null_statut
+FROM commande;
+
+SELECT 'ligne_commande' AS table_name,
+       COUNT(*) - COUNT(commande_id)   AS nb_null_commande_id,
+       COUNT(*) - COUNT(produit_id)    AS nb_null_produit_id,
+       COUNT(*) - COUNT(quantite)      AS nb_null_quantite,
+       COUNT(*) - COUNT(prix_unitaire) AS nb_null_prix_unitaire
+FROM ligne_commande;
+
+-- Interprétation 15.A :
+--   Toutes les colonnes sont déclarées NOT NULL dans create_schema.sql :
+--   la base refuse donc les valeurs manquantes, et on obtient 0 partout.
+--   Les contraintes du schéma garantissent la qualité de ces données.
+
+
+-- ------------------------------------------------------------
+-- 15.B Analyse commerciale
+-- ------------------------------------------------------------
+
+-- 15.B.1 CA total, nombre de commandes, panier moyen, clients actifs
+-- En une seule requête :
+--   - JOIN commande / ligne_commande pour avoir les montants ;
+--   - WHERE statut <> 'annulée' pour respecter la règle de calcul ;
+--   - COUNT(DISTINCT c.id) : la jointure répète chaque commande autant de
+--     fois qu'elle a de lignes, DISTINCT évite de la compter plusieurs fois ;
+--   - panier moyen = CA / nombre de commandes ;
+--   - client actif = client ayant au moins une commande non annulée.
+SELECT
+    SUM(lc.quantite * lc.prix_unitaire)                    AS chiffre_affaires,
+    COUNT(DISTINCT c.id)                                   AS nb_commandes,
+    ROUND(SUM(lc.quantite * lc.prix_unitaire)
+          / COUNT(DISTINCT c.id), 2)                       AS panier_moyen,
+    COUNT(DISTINCT c.client_id)                            AS nb_clients_actifs
+FROM commande c
+JOIN ligne_commande lc ON lc.commande_id = c.id
+WHERE c.statut <> 'annulée';
+
+-- 15.B.2 Taux d'annulation des commandes
+-- Ici on prend TOUTES les commandes (y compris les annulées), sinon le
+-- taux serait toujours de 0 %.
+--   COUNT(*) FILTER (WHERE ...) : ne compte que les lignes qui vérifient
+--   la condition (syntaxe PostgreSQL).
+--   100.0 (et pas 100) : force une division décimale ; avec deux entiers,
+--   PostgreSQL ferait une division entière et renverrait 0.
+SELECT
+    COUNT(*)                                            AS nb_commandes_total,
+    COUNT(*) FILTER (WHERE statut = 'annulée')          AS nb_commandes_annulees,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE statut = 'annulée')
+          / COUNT(*), 2)                                AS taux_annulation_pct
+FROM commande;
+
+-- Interprétation 15.B :
+--   - CA : argent réellement encaissé (hors commandes annulées) ;
+--   - nombre de commandes : volume d'activité ;
+--   - panier moyen : dépense moyenne par commande (CA / nb commandes) ;
+--   - clients actifs < nombre total de clients : certains clients sont
+--     inscrits mais n'ont jamais commandé ;
+--   - un taux d'annulation faible indique peu de commandes perdues.
+
+
+-- ------------------------------------------------------------
+-- 15.C Analyse des clients
+-- ------------------------------------------------------------
+
+-- Top 10 des clients ayant généré le plus de chiffre d'affaires
+--   - client -> commande -> ligne_commande : on remonte du montant au client ;
+--   - INNER JOIN : les clients sans commande n'ont pas de CA, ils ne
+--     peuvent pas être dans le top ;
+--   - GROUP BY client puis tri décroissant sur le CA, LIMIT 10.
+SELECT
+    cl.id                                  AS client_id,
+    cl.nom,
+    cl.prenom,
+    cl.ville,
+    COUNT(DISTINCT c.id)                   AS nb_commandes,
+    SUM(lc.quantite * lc.prix_unitaire)    AS chiffre_affaires
+FROM client cl
+JOIN commande c        ON c.client_id = cl.id
+JOIN ligne_commande lc ON lc.commande_id = c.id
+WHERE c.statut <> 'annulée'
+GROUP BY cl.id, cl.nom, cl.prenom, cl.ville
+ORDER BY chiffre_affaires DESC
+LIMIT 10;
+
+-- Interprétation 15.C :
+--   Ces clients sont les plus précieux pour l'entreprise : ils peuvent
+--   être ciblés par un programme de fidélité ou des offres dédiées.
+--   Comparer nb_commandes et chiffre_affaires montre si un client dépense
+--   beaucoup parce qu'il commande souvent ou parce qu'il fait de gros paniers.
+
+
+-- ------------------------------------------------------------
+-- 15.D Synthèse mensuelle
+-- ------------------------------------------------------------
+
+-- DROP TABLE IF EXISTS : permet de relancer le script sans erreur
+-- (sinon CREATE TABLE échoue si la table existe déjà).
+DROP TABLE IF EXISTS synthese_mensuelle;
+
+-- CREATE TABLE ... AS SELECT : crée une vraie table remplie avec le
+-- résultat de la requête (contrairement à une vue, les données sont
+-- stockées : c'est une "photo" à l'instant de l'exécution).
+--   DATE_TRUNC('month', date) ramène chaque date au 1er du mois
+--   (ex. 2025-03-17 -> 2025-03-01), ce qui permet de regrouper par mois ;
+--   ::DATE convertit le résultat (timestamp) en date simple.
+CREATE TABLE synthese_mensuelle AS
+SELECT
+    DATE_TRUNC('month', c.date_commande)::DATE           AS mois,
+    COUNT(DISTINCT c.id)                                 AS nb_commandes,
+    SUM(lc.quantite * lc.prix_unitaire)                  AS chiffre_affaires,
+    ROUND(SUM(lc.quantite * lc.prix_unitaire)
+          / COUNT(DISTINCT c.id), 2)                     AS panier_moyen
+FROM commande c
+JOIN ligne_commande lc ON lc.commande_id = c.id
+WHERE c.statut <> 'annulée'
+GROUP BY DATE_TRUNC('month', c.date_commande);
+
+-- Affichage de la synthèse, du mois le plus ancien au plus récent
+SELECT * FROM synthese_mensuelle ORDER BY mois;
+
+-- Interprétation 15.D :
+-- Cette table permet de suivre mois par mois l'évolution de l'activité :
+--   - nb_commandes     : le volume d'activité (combien de ventes) ;
+--   - chiffre_affaires : la valeur générée ;
+--   - panier_moyen     : combien un client dépense en moyenne par commande.
+-- Elle permet de repérer les mois forts et les mois faibles (saisonnalité),
+-- et de savoir si une hausse du CA vient de plus de commandes ou de
+-- paniers plus gros.
+-- Observations (résultats obtenus) :
+--   - Mois le plus fort : mai 2025 (68 841,64 € de CA, 54 commandes),
+--     suivi d'août (65 441,63 €) et décembre (60 655,34 €).
+--   - Mois le plus faible : janvier 2025 (34 765,36 €, 29 commandes),
+--     puis avril (35 932,15 €) et septembre (40 578,54 €).
+--   - Tendance générale : activité en hausse sur l'année. Le 2e semestre
+--     (≈ 327 700 €) dépasse le 1er (≈ 289 800 €) d'environ 13 %.
+--     Le panier moyen progresse aussi : ≈ 1 200 € en janvier contre
+--     1 578,81 € en octobre et 1 444,17 € en décembre. La croissance du CA
+--     vient donc surtout de paniers plus gros, pas seulement de plus de
+--     commandes (octobre : seulement 34 commandes mais 53 679,61 € de CA).
+--
+-- Résultats clés de l'exercice 15 :
+--   - 100 clients, 65 produits, 500 commandes, 1 547 lignes, 0 valeur manquante ;
+--   - CA total 617 494,76 € sur 484 commandes, panier moyen 1 275,82 € ;
+--   - 90 clients actifs sur 100 (les clients 91 à 100 n'ont jamais commandé :
+--     cible possible pour une relance marketing) ;
+--   - taux d'annulation 3,20 % (16 commandes sur 500) ;
+--   - meilleur client : Alice Dubois (Nice), 17 169,00 € sur 11 commandes.
