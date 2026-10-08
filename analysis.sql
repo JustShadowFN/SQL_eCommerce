@@ -172,8 +172,6 @@ GROUP BY DATE_TRUNC('month', co.date_commande)
 ORDER BY mois;
 
 
-<<<<<<< HEAD
-=======
 -- PARTIE 4
 
 -- ============================================================
@@ -209,7 +207,43 @@ WHERE c.statut <> 'annulée'
 GROUP BY mois
 ORDER BY chiffre_affaires;
 
->>>>>>> eb8e6f7c5e53a0bef1b305b3650fa8bf6016d4f9
+-- PARTIE 5
+
+-- ============================================================
+-- Exercice 13 — Détecter une incohérence
+-- ============================================================
+
+-- 1. Affichage des anomalies (commandes antérieures à l'inscription)
+SELECT 
+    commande.id AS commande_id,
+    commande.client_id,
+    commande.date_commande,
+    client.date_inscription
+FROM commande
+INNER JOIN client ON client.id = commande.client_id
+WHERE commande.date_commande < client.date_inscription;
+
+-- 2. Nombre total d'anomalies détectées
+SELECT 
+    COUNT(*) AS nombre_anomalies
+FROM commande
+INNER JOIN client ON client.id = commande.client_id
+WHERE commande.date_commande < client.date_inscription;
+
+
+-- ============================================================
+-- Exercice 14 — Produits sans vente
+-- ============================================================
+
+-- 1. Requête pour identifier les produits jamais vendus
+SELECT 
+    produit.nom AS produit,
+    produit.categorie,
+    produit.prix,
+    produit.stock
+FROM produit
+LEFT JOIN ligne_commande ON produit.id = ligne_commande.produit_id
+WHERE ligne_commande.produit_id IS NULL;
 
 
 
@@ -429,76 +463,4 @@ SELECT * FROM synthese_mensuelle ORDER BY mois;
 --   - taux d'annulation 3,20 % (16 commandes sur 500) ;
 --   - meilleur client : Alice Dubois (Nice), 17 169,00 € sur 11 commandes.
 
--- PARTIE 4
-
--- ============================================================
--- Exercice 11 — Explorer les produits
--- ============================================================
-SELECT
-  c.id AS commande_id,
-  SUM(lc.quantite * lc.prix_unitaire) AS montant_total,
-  CASE
-    WHEN SUM(lc.quantite * lc.prix_unitaire) < 500  THEN 'Petit panier'
-    WHEN SUM(lc.quantite * lc.prix_unitaire) < 1500 THEN 'Panier moyen'
-    ELSE 'Gros panier'
-  END AS categorie_commande
-FROM commande c
-JOIN ligne_commande lc ON lc.commande_id = c.id
-WHERE c.statut <> 'annulée'
-GROUP BY c.id
-ORDER BY c.id;
-
-
--- ============================================================
--- Exercice 12 — Explorer les produits
--- ============================================================
-
--- évolution mensuelle de l'activité trié par CA
-SELECT
-  EXTRACT(MONTH FROM c.date_commande) AS mois,
-  COUNT(DISTINCT c.id)                AS nb_commandes,
-  SUM(lc.quantite * lc.prix_unitaire) AS chiffre_affaires
-FROM commande c
-JOIN ligne_commande lc ON lc.commande_id = c.id
-WHERE c.statut <> 'annulée'
-GROUP BY mois
-ORDER BY chiffre_affaires;
-
--- PARTIE 5
-
--- ============================================================
--- Exercice 13 — Détecter une incohérence
--- ============================================================
-
--- 1. Affichage des anomalies (commandes antérieures à l'inscription)
-SELECT 
-    commande.id AS commande_id,
-    commande.client_id,
-    commande.date_commande,
-    client.date_inscription
-FROM commande
-INNER JOIN client ON client.id = commande.client_id
-WHERE commande.date_commande < client.date_inscription;
-
--- 2. Nombre total d'anomalies détectées
-SELECT 
-    COUNT(*) AS nombre_anomalies
-FROM commande
-INNER JOIN client ON client.id = commande.client_id
-WHERE commande.date_commande < client.date_inscription;
-
-
--- ============================================================
--- Exercice 14 — Produits sans vente
--- ============================================================
-
--- 1. Requête pour identifier les produits jamais vendus
-SELECT 
-    produit.nom AS produit,
-    produit.categorie,
-    produit.prix,
-    produit.stock
-FROM produit
-LEFT JOIN ligne_commande ON produit.id = ligne_commande.produit_id
-WHERE ligne_commande.produit_id IS NULL;
 
