@@ -501,3 +501,87 @@ ORDER BY type_client;
 -- En conclusion, les clients sont fidèles, ce qui est un
 -- bon signe de satisfaction. L'entreprise peut cibler les 10 % d'inscrits
 -- sans commande.
+
+-- =====================================================================
+--  ANALYSE B : Produits en risque de rupture de stock
+-- =====================================================================
+-- Question : Quels produits se vendent bien mais n'ont presque plus de stock ?
+-- Données : tables produit, ligne_commande et commande (annulées exclues).
+
+SELECT
+    p.nom,
+    p.categorie,
+    p.stock,
+    SUM(lc.quantite) AS qte_vendue
+FROM produit p
+JOIN ligne_commande lc ON lc.produit_id = p.id
+JOIN commande c ON c.id = lc.commande_id
+WHERE c.statut <> 'annulée'
+GROUP BY p.id, p.nom, p.categorie, p.stock
+ORDER BY p.stock, qte_vendue DESC
+LIMIT 10;
+
+-- Résultat :
+--   Lampe 2         | Maison       | stock  0 | 62 vendus
+--   Sweat 1         | Mode         | stock  0 | 56 vendus
+--   Souris 2        | Informatique | stock  0 | 41 vendus
+--   Haltères 1      | Sport        | stock  1 | 48 vendus
+--   Enceinte 1      | Audio        | stock  7 | 73 vendus
+--   Tapis de yoga 1 | Sport        | stock  8 | 64 vendus
+--   Disque dur 1    | Informatique | stock  8 | 58 vendus
+--   Souris 1        | Informatique | stock  9 | 68 vendus
+--   Écouteurs 1     | Audio        | stock 10 | 68 vendus
+--   Plaid 1         | Maison       | stock 11 | 81 vendus
+--
+-- Observation : 3 produits n'ont plus de stock alors qu'ils se vendent
+-- bien (Lampe 2, Sweat 1, Souris 2). Les autres produits de la liste ont
+-- peu de stock par rapport à ce qu'ils vendent.
+--
+-- Intérêt pour l'entreprise : si un produit est en rupture, l'entreprise
+-- perd des ventes. Elle doit recommander ces produits en priorité.
+
+-- =====================================================================
+--  ANALYSE C : Chiffre d'affaires par ville
+-- =====================================================================
+-- Question : Quelles villes rapportent le plus ?
+-- Données : tables client, commande et ligne_commande (annulées exclues).
+
+SELECT
+    cl.ville,
+    COUNT(DISTINCT cl.id) AS nb_clients,
+    SUM(lc.quantite * lc.prix_unitaire) AS chiffre_affaires,
+    ROUND(SUM(lc.quantite * lc.prix_unitaire) / COUNT(DISTINCT cl.id), 2) AS ca_par_client
+FROM client cl
+JOIN commande c ON c.client_id = cl.id
+JOIN ligne_commande lc ON lc.commande_id = c.id
+WHERE c.statut <> 'annulée'
+GROUP BY cl.ville
+ORDER BY chiffre_affaires DESC;
+
+-- Résultat :
+--   Montpellier | 9 clients | 83 721.92 € | 9 302.44 € par client
+--   Marseille   | 9 clients | 75 129.81 € | 8 347.76 € par client
+--   Nice        | 9 clients | 66 706.48 € | 7 411.83 € par client
+--   Paris       | 9 clients | 64 073.31 € | 7 119.26 € par client
+--   Lyon        | 9 clients | 63 758.54 € | 7 084.28 € par client
+--   Lille       | 9 clients | 62 782.84 € | 6 975.87 € par client
+--   Toulouse    | 9 clients | 57 541.48 € | 6 393.50 € par client
+--   Bordeaux    | 9 clients | 53 697.99 € | 5 966.44 € par client
+--   Nantes      | 9 clients | 49 808.94 € | 5 534.33 € par client
+--   Strasbourg  | 9 clients | 40 273.45 € | 4 474.83 € par client
+--
+-- Observation : toutes les villes ont le même nombre de clients (9),
+-- mais elles ne rapportent pas pareil. Montpellier rapporte le plus et
+-- Strasbourg le moins. Un client de Montpellier dépense environ 2 fois
+-- plus qu'un client de Strasbourg.
+--
+-- Intérêt pour l'entreprise : l'entreprise sait dans quelles villes ses
+-- clients dépensent le plus. Elle peut faire plus de pub dans les villes
+-- qui rapportent moins, comme Strasbourg ou Nantes.
+
+-- CONCLUSION FINALE :
+-- **Fidélité** : 88 % des clients ont commandé au moins 2 fois, mais 10 % des inscrits n'ont jamais commandé.
+-- **Stocks** : 3 produits qui se vendent bien sont en rupture (Lampe 2, Sweat 1, Souris 2), il faut les réapprovisionner.
+-- **Villes** : toutes les villes ont 9 clients, mais Montpellier rapporte environ 2 fois plus que Strasbourg.
+
+-- Utilisation de l'IA : Claude m'a aidée à rédiger les observations proprement. J'ai lancé les requête et vérifié tous les résultats moi-même dans PostgreSQL.
