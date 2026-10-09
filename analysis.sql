@@ -463,4 +463,41 @@ SELECT * FROM synthese_mensuelle ORDER BY mois;
 --   - taux d'annulation 3,20 % (16 commandes sur 500) ;
 --   - meilleur client : Alice Dubois (Nice), 17 169,00 € sur 11 commandes.
 
+-- =====================================================================
+-- PARTIE 7 — ANALYSE A : Fidélité des clients
+-- =====================================================================
+-- Question : Nos clients reviennent-ils acheter ?
+-- Données : tables client et commande (commandes annulées exclues).
 
+WITH commandes_par_client AS (
+    SELECT cl.id, COUNT(co.id) AS nb_commandes
+    FROM client cl
+    LEFT JOIN commande co
+        ON co.client_id = cl.id
+       AND co.statut <> 'annulée'
+    GROUP BY cl.id
+)
+SELECT
+    CASE
+        WHEN nb_commandes = 0 THEN '0 - Jamais commandé'
+        WHEN nb_commandes = 1 THEN '1 - Ponctuel (1 commande)'
+        ELSE '2 - Récurrent (2 commandes ou +)'
+    END AS type_client,
+    COUNT(*) AS nb_clients,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) AS pourcentage
+FROM commandes_par_client
+GROUP BY type_client
+ORDER BY type_client;
+
+-- Résultat :
+--   Jamais commandé  : 10 clients (10 %)
+--   Ponctuel         :  2 clients (2 %)
+--   Récurrent        : 88 clients (88 %)
+--
+-- Observation : la grande majorité des clients (88 %) a passé au moins
+-- 2 commandes. Très peu de clients n'achètent qu'une seule fois.
+-- Mais 10 % des inscrits n'ont jamais commandé.
+--
+-- En conclusion, les clients sont fidèles, ce qui est un
+-- bon signe de satisfaction. L'entreprise peut cibler les 10 % d'inscrits
+-- sans commande.
